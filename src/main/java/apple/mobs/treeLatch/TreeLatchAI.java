@@ -1,10 +1,8 @@
 package apple.mobs.treeLatch;
 
+import apple.mobs.utils.BoundingBoxUtils;
 import org.apache.commons.lang.enums.ValuedEnum;
-import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
-import org.bukkit.Location;
-import org.bukkit.World;
+import org.bukkit.*;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Entity;
@@ -24,6 +22,8 @@ public class TreeLatchAI {
     private static final String INVULNERABLE_TIME_PATH = "invulnerableTime";
     private static final String SIGHT_Y_PATH = "sightY";
     private static final String SIGHT_PATH = "sightLateral";
+    public static final int THYLA_GROWL_LENGTH = 6;
+    public static final int THYLA_POUNCE_WAIT = 4;
     private static double pounceSpeed;
     private static long invulnerableTime;
     private static int sightY;
@@ -64,6 +64,7 @@ public class TreeLatchAI {
     }
 
     private static void doCheckSight(Mob thyla) {
+        if (thyla.isDead()) return;
         Location entityLocation = thyla.getLocation();
         World entityWorld = entityLocation.getWorld();
         if (entityWorld == null) {
@@ -95,7 +96,10 @@ public class TreeLatchAI {
             for (Player player : nearbyPlayers) {
                 if (thylaCanSee(thyla, player)) {
                     // make the thyla jump at this player
-                    doThylaPounce(thyla, player);
+                    for (Player playerToScare : nearbyPlayers) {
+                        playerToScare.playSound(playerToScare.getLocation(), Sound.ENTITY_WOLF_GROWL, SoundCategory.HOSTILE, 10, 1);
+                    }
+                    Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> doThylaPounceCalculation(thyla, player), THYLA_GROWL_LENGTH);
                     return;
                 }
             }
@@ -104,10 +108,10 @@ public class TreeLatchAI {
 
     }
 
-    private static void doThylaPounce(Mob thyla, Player player) {
+    private static void doThylaPounceCalculation(Mob thyla, Player player) {
+
         Location thylaLoc = thyla.getEyeLocation();
         Location playerLoc = player.getEyeLocation();
-        thyla.setInvulnerable(true);
         double x = playerLoc.getX() - thylaLoc.getX();
         double y = playerLoc.getY() - thylaLoc.getY();
         double z = playerLoc.getZ() - thylaLoc.getZ();
@@ -115,24 +119,70 @@ public class TreeLatchAI {
         x /= magnitude;
         y /= magnitude;
         z /= magnitude;
-        Vector newVelocity = new Vector(x, y, z);
-        newVelocity = newVelocity.multiply(pounceSpeed);
-        thyla.setVelocity(newVelocity);
-        thyla.setAI(true);
-        thyla.setAware(true);
-        thyla.setGravity(true);
-        thyla.setTarget(player);
-        Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> normalizeThyla(thyla), invulnerableTime);
-        System.out.println("pounce!");
+        Vector newVelocity = new Vector(x, y, z).multiply(pounceSpeed);
+        Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> doThylaPounce(thyla, player, newVelocity, (long) (magnitude / pounceSpeed)), THYLA_POUNCE_WAIT);
     }
 
-    private static void normalizeThyla(Mob thyla) {
+    private static void doThylaPounce(Mob thyla, Player player, Vector newVelocity, long timeToSlow) {
+        thyla.setVelocity(newVelocity);
+        thyla.setGravity(false);
+        thyla.setAI(true);
+        thyla.setAware(true);
+        thyla.setInvulnerable(true);
+
+        for (int i = 1; i < timeToSlow; i += 2)
+            Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> thyla.setVelocity(newVelocity), i);
+        Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> slowThyla(thyla, player), timeToSlow);
+        Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> normalizeThyla(thyla), invulnerableTime + 4);
+    }
+
+    private static void slowThyla(Mob thyla, Player player) {
+        Bukkit.broadcastMessage("slowing");
+        thyla.setTarget(player);
+        thyla.setGravity(true);
+        double divisor = pounceSpeed * 2;
+        thyla.setVelocity(thyla.getVelocity().divide(new Vector(divisor, divisor, divisor)));
+    }
+
+    private static void normalizeThyla(@NotNull Mob thyla) {
         thyla.setInvulnerable(false);
     }
 
-    private static boolean thylaCanSee(Mob thyla, Player player) {
-//        BoundingBox hitBox = thyla.getBoundingBox();
+    private static boolean thylaCanSee(@NotNull Mob thyla, @NotNull Player player) {
+        BoundingBox hitBox = thyla.getBoundingBox();
+        List<Vector> corners = BoundingBoxUtils.getCorners(hitBox);
+        Location eye = player.getEyeLocation();
+        World world = eye.getWorld();
+        if (world == null) return false;
+        Vector toLoc = new Vector(eye.getX(), eye.getY(), eye.getZ());
+        for (Vector corner : corners) {
+            if (rayTrace(world, toLoc, corner))
+                return false;
+        }
+        return true;
+    }
 
-        return thyla.hasLineOfSight(player);
+    private static boolean rayTrace(@NotNull World world, @NotNull Vector spot1, @NotNull Vector spot2) {
+        // look at spot1 from spot2
+        double x = spot1.getX() - spot2.getX();
+        double y = spot1.getY() - spot2.getY();
+        double z = spot1.getZ() - spot2.getZ();
+        double magnitude = Math.sqrt(x * x + y * y + z * z);
+        x /= magnitude;
+        y /= magnitude;
+        z /= magnitude;
+        int checks = 5;
+        x /= checks;
+        y /= checks;
+        z /= checks;
+        Vector direction = new Vector(x, y, z);
+        int totalChecks = checks * 3;
+        for (int i = 0; i < totalChecks; i++) {
+            spot2 = spot2.add(direction);
+            if (world.getBlockAt(spot2.getBlockX(), spot2.getBlockY(), spot2.getBlockZ()).getBlockData().getMaterial().isOccluding()) {
+                return true;
+            }
+        }
+        return false;
     }
 }
