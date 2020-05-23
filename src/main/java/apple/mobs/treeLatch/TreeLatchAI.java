@@ -22,8 +22,12 @@ public class TreeLatchAI {
     private static final long CHECK_SIGHT_COOLDOWN = 20;
     private static final String POUNCE_SPEED_PATH = "pounceSpeed";
     private static final String INVULNERABLE_TIME_PATH = "invulnerableTime";
+    private static final String SIGHT_Y_PATH = "sightY";
+    private static final String SIGHT_PATH = "sightLateral";
     private static double pounceSpeed;
     private static long invulnerableTime;
+    private static int sightY;
+    private static int sightLateral;
     private static final String THYLA_CONFIG = "config.yml";
     private static final Object THYLA_FOLDER = "thyla";
     private static final String THYLA_PATH = "thyla";
@@ -37,10 +41,14 @@ public class TreeLatchAI {
             System.err.println("There was an error with the config file for thylas");
             pounceSpeed = 0;
             invulnerableTime = 0;
+            sightY = 0;
+            sightLateral = 0;
             return;
         }
         pounceSpeed = config.getDouble(POUNCE_SPEED_PATH);
         invulnerableTime = config.getLong(INVULNERABLE_TIME_PATH);
+        sightY = config.getInt(SIGHT_Y_PATH);
+        sightLateral = config.getInt(SIGHT_PATH);
     }
 
     public static void makeThyla(Mob entity) {
@@ -61,7 +69,7 @@ public class TreeLatchAI {
         if (entityWorld == null) {
             return; // this is no longer a working thyla
         }
-        @NotNull Collection<Entity> nearbyEntities = entityWorld.getNearbyEntities(entityLocation, 20, 50, 20);
+        @NotNull Collection<Entity> nearbyEntities = entityWorld.getNearbyEntities(entityLocation, sightLateral, sightY, sightLateral);
         List<Player> nearbyPlayers = new ArrayList<>();
         for (Entity nearbyEntity : nearbyEntities) {
             if (nearbyEntity instanceof Player) {
