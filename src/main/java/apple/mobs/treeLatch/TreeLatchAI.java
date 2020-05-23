@@ -11,6 +11,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 
@@ -122,6 +123,8 @@ public class TreeLatchAI {
     }
 
     private static boolean thylaCanSee(Mob thyla, Player player) {
+//        BoundingBox hitBox = thyla.getBoundingBox();
+
         return thyla.hasLineOfSight(player);
     }
 }

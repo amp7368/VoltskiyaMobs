@@ -4,6 +4,7 @@ import apple.mobs.VoltskiyaMobsMain;
 import apple.mobs.treeLatch.TreeLatchAI;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -25,8 +26,7 @@ public class BetterSpiderSpawn implements Listener {
     public void onCreatureSpawn(CreatureSpawnEvent event) {
         Entity entity = event.getEntity();
         Set<String> tags = entity.getScoreboardTags();
-        if (tags.contains(BETTER_SPIDER_SPAWN) && entity instanceof Mob) {
-            TreeLatchAI.makeThyla((Mob) entity);
+        if (tags.contains(BETTER_SPIDER_SPAWN)) {
         }
     }
 }
