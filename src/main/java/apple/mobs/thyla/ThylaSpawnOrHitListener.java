@@ -12,10 +12,10 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.Set;
 
-public class TreeLatchSpawnOrHitListener implements Listener {
+public class ThylaSpawnOrHitListener implements Listener {
     private static final String latchTag = "ai.thyla";
 
-    public TreeLatchSpawnOrHitListener(JavaPlugin plugin) {
+    public ThylaSpawnOrHitListener(JavaPlugin plugin) {
         Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
@@ -24,7 +24,7 @@ public class TreeLatchSpawnOrHitListener implements Listener {
         Entity entity = event.getEntity();
         Set<String> tags = entity.getScoreboardTags();
         if (tags.contains(latchTag) && entity instanceof Mob) {
-            TreeLatchAI.makeThyla((Mob)entity);
+            ThylaAI.makeThyla((Mob)entity);
         }
     }
     @EventHandler
@@ -32,7 +32,7 @@ public class TreeLatchSpawnOrHitListener implements Listener {
         Entity entity = event.getEntity();
         Set<String> tags = entity.getScoreboardTags();
         if (tags.contains(latchTag) && entity instanceof Mob) {
-            TreeLatchAI.countHit(entity.getUniqueId(),System.currentTimeMillis());
+            ThylaAI.countHit(entity.getUniqueId(),System.currentTimeMillis());
         }
     }
 }

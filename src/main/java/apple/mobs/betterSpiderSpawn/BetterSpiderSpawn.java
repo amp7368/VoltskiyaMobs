@@ -16,11 +16,8 @@ import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
-import java.util.Set;
 
 public class BetterSpiderSpawn implements Listener {
-
-    private static final String BETTER_SPIDER_SPAWN = "spawn.spider";
 
     public BetterSpiderSpawn(JavaPlugin plugin) {
         Bukkit.getPluginManager().registerEvents(this, plugin);

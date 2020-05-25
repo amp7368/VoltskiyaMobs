@@ -1,8 +1,7 @@
 package apple.mobs;
 
-import apple.mobs.betterSpiderSpawn.BetterSpiderSpawn;
-import apple.mobs.thyla.TreeLatchAI;
-import apple.mobs.thyla.TreeLatchSpawnOrHitListener;
+import apple.mobs.betterSpiderSpawn.BetterSpiderSpwnMain;
+import apple.mobs.thyla.ThylaMain;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class VoltskiyaMobsMain extends JavaPlugin {
@@ -10,9 +9,9 @@ public class VoltskiyaMobsMain extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        TreeLatchAI.initialize(this);
-        new TreeLatchSpawnOrHitListener(this);
-        new BetterSpiderSpawn(this);
+        ThylaMain.enable(this);
+        BetterSpiderSpwnMain.enable(this);
+
         System.out.println(PLUGIN_NAME + " enabled");
     }
 }

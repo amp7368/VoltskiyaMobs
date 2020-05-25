@@ -17,7 +17,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.File;
 import java.util.*;
 
-public class TreeLatchAI {
+public class ThylaAI {
     private static final long CHECK_SIGHT_COOLDOWN = 20;
     private static final String POUNCE_SPEED_PATH = "pounceSpeed";
     private static final String SIGHT_Y_PATH = "sightY";
