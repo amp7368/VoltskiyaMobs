@@ -1,7 +1,6 @@
-package apple.mobs.treeLatch;
+package apple.mobs.thyla;
 
 import apple.mobs.utils.BoundingBoxUtils;
-import org.apache.commons.lang.enums.ValuedEnum;
 import org.bukkit.*;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -9,6 +8,8 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
@@ -19,19 +20,20 @@ import java.util.*;
 public class TreeLatchAI {
     private static final long CHECK_SIGHT_COOLDOWN = 20;
     private static final String POUNCE_SPEED_PATH = "pounceSpeed";
-    private static final String INVULNERABLE_TIME_PATH = "invulnerableTime";
     private static final String SIGHT_Y_PATH = "sightY";
     private static final String SIGHT_PATH = "sightLateral";
     public static final int THYLA_GROWL_LENGTH = 6;
     public static final int THYLA_POUNCE_WAIT = 4;
+    private static final double STUN_DISTANCE = 2;
     private static double pounceSpeed;
-    private static long invulnerableTime;
     private static int sightY;
     private static int sightLateral;
     private static final String THYLA_CONFIG = "config.yml";
-    private static final Object THYLA_FOLDER = "thyla";
+    private static final String THYLA_FOLDER = "thyla";
     private static final String THYLA_PATH = "thyla";
     private static JavaPlugin plugin;
+    private static final Object thylaWasHitSync = new Object();
+    private static final HashMap<UUID, Long> thylaWashit = new HashMap<>();
 
     public static void initialize(JavaPlugin pl) {
         plugin = pl;
@@ -40,31 +42,29 @@ public class TreeLatchAI {
         if (config == null) {
             System.err.println("There was an error with the config file for thylas");
             pounceSpeed = 0;
-            invulnerableTime = 0;
             sightY = 0;
             sightLateral = 0;
             return;
         }
         pounceSpeed = config.getDouble(POUNCE_SPEED_PATH);
-        invulnerableTime = config.getLong(INVULNERABLE_TIME_PATH);
         sightY = config.getInt(SIGHT_Y_PATH);
         sightLateral = config.getInt(SIGHT_PATH);
     }
 
     public static void makeThyla(Mob entity) {
-        Location entityLocation = entity.getLocation();
-
-        //todo make it spawn on a solid surface
-
         entity.setAI(false);
         entity.setAware(true);
         entity.setGravity(false);
         Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> doCheckSight(entity), CHECK_SIGHT_COOLDOWN);
-        System.out.println("thyla made");
     }
 
     private static void doCheckSight(Mob thyla) {
-        if (thyla.isDead()) return;
+        synchronized (thylaWasHitSync) {
+            thylaWashit.remove(thyla.getUniqueId());
+        }
+        if (thyla.isDead()) {
+            return;
+        }
         Location entityLocation = thyla.getLocation();
         World entityWorld = entityLocation.getWorld();
         if (entityWorld == null) {
@@ -109,7 +109,6 @@ public class TreeLatchAI {
     }
 
     private static void doThylaPounceCalculation(Mob thyla, Player player) {
-
         Location thylaLoc = thyla.getEyeLocation();
         Location playerLoc = player.getEyeLocation();
         double x = playerLoc.getX() - thylaLoc.getX();
@@ -124,29 +123,82 @@ public class TreeLatchAI {
     }
 
     private static void doThylaPounce(Mob thyla, Player player, Vector newVelocity, long timeToSlow) {
-        thyla.setVelocity(newVelocity);
-        thyla.setGravity(false);
         thyla.setAI(true);
         thyla.setAware(true);
+        trimThylasWasHit();
+        synchronized (thylaWasHitSync) {
+            Long timeSinceHit = thylaWashit.getOrDefault(thyla.getUniqueId(), (long) -1);
+            if (!timeSinceHit.equals((long) -1)) {
+                thylaWashit.remove(thyla.getUniqueId());
+                slowThyla(thyla, player);
+                normalizeThyla(thyla);
+                return;
+            }
+        }
+        thyla.setVelocity(newVelocity);
+        thyla.setGravity(false);
         thyla.setInvulnerable(true);
 
         for (int i = 1; i < timeToSlow; i += 2)
             Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> thyla.setVelocity(newVelocity), i);
-        Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> slowThyla(thyla, player), timeToSlow);
-        Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> normalizeThyla(thyla), invulnerableTime + 4);
+        Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> isThylaHit(thyla, player, 10), Math.max(0, timeToSlow - 3));
+        Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> slowThyla(thyla, player), timeToSlow + 2);
+        Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> normalizeThyla(thyla), timeToSlow + 7);
+    }
+
+    private static void trimThylasWasHit() {
+        synchronized (thylaWasHitSync) {
+            long currentTime = System.currentTimeMillis();
+            List<UUID> toRemove = new LinkedList<>();
+            for (UUID uid : thylaWashit.keySet()) {
+                Long timeSinceLastHit = thylaWashit.get(uid);
+                if (currentTime - timeSinceLastHit > 10000) {
+                    toRemove.add(uid);
+                }
+            }
+            for (UUID uid : toRemove)
+                thylaWashit.remove(uid);
+        }
+    }
+
+    private static void isThylaHit(Mob thyla, Player player, int timesToCheck) {
+        if (isLocationsClose(thyla.getLocation(), player.getEyeLocation(), STUN_DISTANCE) || isLocationsClose(thyla.getLocation(), player.getLocation(), STUN_DISTANCE)) {
+            thylaStunPlayer(player);
+        } else if (timesToCheck != 0) {
+            Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> isThylaHit(thyla, player, timesToCheck - 1), 1);
+        }
+    }
+
+    private static boolean isLocationsClose(Location loc1, Location loc2, double distance) {
+        double x = loc1.getX() - loc2.getX();
+        double y = loc1.getY() - loc2.getY();
+        double z = loc1.getZ() - loc2.getZ();
+        double magnitude = Math.sqrt(x * x + y * y + z * z);
+        return magnitude < distance;
+    }
+
+    private static void thylaStunPlayer(Player player) {
+        player.addPotionEffect(new PotionEffect(PotionEffectType.SLOW, 200, 10));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_DIGGING, 200, 10));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 40, 1));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.CONFUSION, 100, 3));
     }
 
     private static void slowThyla(Mob thyla, Player player) {
-        Bukkit.broadcastMessage("slowing");
         thyla.setTarget(player);
         thyla.setGravity(true);
         double divisor = pounceSpeed * 2;
         thyla.setVelocity(thyla.getVelocity().divide(new Vector(divisor, divisor, divisor)));
+        World world = thyla.getWorld();
+        Location soundLoc = thyla.getLocation();
+        world.playSound(soundLoc, Sound.ENTITY_WOLF_AMBIENT, SoundCategory.HOSTILE, 10, (float) 0.5);
+        world.playSound(soundLoc, Sound.ENTITY_PLAYER_BIG_FALL, SoundCategory.HOSTILE, 10, (float) 0.1);
     }
 
     private static void normalizeThyla(@NotNull Mob thyla) {
         thyla.setInvulnerable(false);
     }
+
 
     private static boolean thylaCanSee(@NotNull Mob thyla, @NotNull Player player) {
         BoundingBox hitBox = thyla.getBoundingBox();
@@ -184,5 +236,11 @@ public class TreeLatchAI {
             }
         }
         return false;
+    }
+
+    public static void countHit(UUID uniqueId, long currentTimeMillis) {
+        synchronized (thylaWasHitSync) {
+            thylaWashit.put(uniqueId, currentTimeMillis);
+        }
     }
 }
